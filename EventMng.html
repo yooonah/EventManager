@@ -166,22 +166,6 @@
                     </tbody>
                 </table>
             </div>
-            <div class="mt-4 flex justify-between">
-                <div>
-                    <h3 class="text-lg font-semibold mb-3 text-gray-700">엑셀 파일 가져오기</h3>
-                    <p class="text-sm text-gray-600 mb-2">
-                        엑셀 파일(.xlsx, .xls)의 첫 번째 시트 데이터를 가져옵니다.<br>
-                        필수 헤더: <code class="text-xs bg-gray-200 px-1 rounded">날짜</code>, <code class="text-xs bg-gray-200 px-1 rounded">구분</code>, <code class="text-xs bg-gray-200 px-1 rounded">대상자</code><br>
-                        선택 헤더: <code class="text-xs bg-gray-200 px-1 rounded">금액</code>, <code class="text-xs bg-gray-200 px-1 rounded">메모</code>
-                    </p>
-                    <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
-                </div>
-                <div>
-                    <button onclick="exportToJSON()" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        <span class="lucide mr-2">&#xE2C4;</span> JSON 저장
-                    </button>
-                </div>
-            </div>
         </div>
 
         <div id="register-tab" class="tab-content">
@@ -229,6 +213,38 @@
                     <!-- 구분 목록이 여기에 표시됩니다 -->
                     <li id="empty-type-item" class="text-sm text-gray-500 hidden">등록된 구분이 없습니다.</li>
                 </ul>
+            </div>
+
+            <div class="border-t border-gray-200 pt-8">
+                <h2 class="text-lg font-semibold mb-4 text-gray-700">데이터 관리</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-md font-medium mb-2 text-gray-700">엑셀 파일</h3>
+                        <p class="text-sm text-gray-600 mb-2">
+                            엑셀 파일(.xlsx, .xls)의 첫 번째 시트 데이터를 가져옵니다.<br>
+                            필수 헤더: <code class="text-xs bg-gray-200 px-1 rounded">날짜</code>, <code class="text-xs bg-gray-200 px-1 rounded">구분</code>, <code class="text-xs bg-gray-200 px-1 rounded">대상자</code><br>
+                            선택 헤더: <code class="text-xs bg-gray-200 px-1 rounded">금액</code>, <code class="text-xs bg-gray-200 px-1 rounded">메모</code>
+                        </p>
+                        <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    </div>
+                    <div>
+                        <h3 class="text-md font-medium mb-2 text-gray-700">JSON 파일</h3>
+                        <div class="space-y-2">
+                            <button onclick="exportToJSON()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <span class="lucide mr-2">&#xE2C4;</span> JSON Export
+                            </button>
+                            <div class="relative">
+                                <input type="file" id="json-file-input" accept=".json" class="hidden" />
+                                <button onclick="document.getElementById('json-file-input').click()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                    <span class="lucide mr-2">&#xE2C5;</span> JSON Import
+                                </button>
+                            </div>
+                            <button onclick="downloadJSON()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <span class="lucide mr-2">&#xE2C4;</span> JSON Download
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -639,6 +655,82 @@
             link.click();
             document.body.removeChild(link);
             showMessage('JSON 파일이 저장되었습니다.', 'success');
+        }
+
+        function loadJSON() {
+            fetch('./data/list.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('파일을 불러오는데 실패했습니다.');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.events && Array.isArray(data.events)) {
+                        saveEventsToStorage(data.events);
+                        loadEvents();
+                        showMessage(`${data.events.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
+                    } else {
+                        throw new Error('잘못된 JSON 형식입니다.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading JSON:', error);
+                    showMessage(error.message, 'error');
+                });
+        }
+
+        // JSON 파일 로드 이벤트 리스너 추가
+        document.getElementById('json-file-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.events && Array.isArray(data.events)) {
+                        saveEventsToStorage(data.events);
+                        loadEvents();
+                        showMessage(`${data.events.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
+                    } else {
+                        throw new Error('잘못된 JSON 형식입니다.');
+                    }
+                } catch (error) {
+                    console.error('Error parsing JSON:', error);
+                    showMessage('JSON 파일 형식이 올바르지 않습니다.', 'error');
+                }
+            };
+            reader.onerror = function(error) {
+                console.error('File reading error:', error);
+                showMessage('파일을 읽는 중 오류가 발생했습니다.', 'error');
+            };
+            reader.readAsText(file);
+        });
+
+        function downloadJSON() {
+            fetch('./data/list.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('파일을 다운로드하는데 실패했습니다.');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'list.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showMessage('JSON 파일이 다운로드되었습니다.', 'success');
+                })
+                .catch(error => {
+                    console.error('Error downloading JSON:', error);
+                    showMessage(error.message, 'error');
+                });
         }
     </script>
 </body>
