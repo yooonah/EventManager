@@ -290,7 +290,6 @@
                 showMessage('새로운 내역이 추가되었습니다.', 'success');
             });
             excelFileInput.addEventListener('change', handleExcelFile);
-            startAutoSave(); // 자동 저장 시작
 
             // 탭 기능 초기화
             document.querySelectorAll('.tab-button').forEach(button => {
@@ -423,7 +422,6 @@
 
         function saveEventsToStorage(events) {
             localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
-            startAutoSave(); // 자동 저장 타이머 리셋
         }
 
         function saveSingleEvent(event) {
@@ -641,23 +639,6 @@
             link.click();
             document.body.removeChild(link);
             showMessage('JSON 파일이 저장되었습니다.', 'success');
-        }
-
-        // 자동 저장 기능
-        let autoSaveTimeout;
-        const AUTO_SAVE_INTERVAL = 300000; // 5분
-
-        function startAutoSave() {
-            if (autoSaveTimeout) {
-                clearTimeout(autoSaveTimeout);
-            }
-            autoSaveTimeout = setTimeout(() => {
-                const events = getEventsFromStorage();
-                if (events.length > 0) {
-                    exportToJSON();
-                }
-                startAutoSave(); // 다음 자동 저장 예약
-            }, AUTO_SAVE_INTERVAL);
         }
     </script>
 </body>
