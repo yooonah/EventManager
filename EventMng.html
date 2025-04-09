@@ -228,9 +228,12 @@
                     </div>
                     <div>
                         <h3 class="text-md font-medium mb-2 text-gray-700">JSON 파일</h3>
+                        <p class="text-sm text-gray-600 mb-2">
+                            <strong>중요:</strong> 변경 사항을 영구 저장하려면 <strong>'JSON Download'</strong> 버튼으로 <code class="text-xs bg-gray-200 px-1 rounded">events.json</code> 파일을 다운로드한 후, 프로젝트의 <code class="text-xs bg-gray-200 px-1 rounded">data/events.json</code> 파일을 직접 덮어쓰고 GitHub에 커밋/푸시해야 합니다.
+                        </p>
                         <div class="space-y-2">
                             <button onclick="exportToJSON()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                <span class="lucide mr-2">&#xE2C4;</span> JSON Export
+                                <span class="lucide mr-2">&#xE2C4;</span> JSON Export (백업용)
                             </button>
                             <div class="relative">
                                 <input type="file" id="json-file-input" accept=".json" class="hidden" />
@@ -238,8 +241,8 @@
                                     <span class="lucide mr-2">&#xE2C5;</span> JSON Import
                                 </button>
                             </div>
-                            <button onclick="downloadJSON()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                <span class="lucide mr-2">&#xE2C4;</span> JSON Download
+                            <button onclick="exportDataFile()" class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <span class="lucide mr-2">&#xE2C4;</span> JSON Download (덮어쓰기용)
                             </button>
                         </div>
                     </div>
@@ -264,16 +267,19 @@
         const messageContainer = document.getElementById('message-container');
 
         // --- Constants ---
-        const EVENTS_STORAGE_KEY = 'gyeongjosaEvents';
         const TYPES_STORAGE_KEY = 'gyeongjosaTypes';
         const DEFAULT_TYPES = ['윤아 결혼', '할머니 장례'];
+        const DATA_FILE_PATH = './data/events.json';
+
+        // --- Global State ---
+        let currentEvents = [];
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             loadTypes();
-            loadEvents();
-            searchInput.addEventListener('input', loadEvents);
-            searchType.addEventListener('change', loadEvents);
+            loadEventsFromJson();
+            searchInput.addEventListener('input', renderEventList);
+            searchType.addEventListener('change', renderEventList);
             addTypeButton.addEventListener('click', handleAddType);
             newTypeInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
@@ -296,8 +302,8 @@
                     return;
                 }
 
-                saveSingleEvent(newEvent);
-                loadEvents();
+                addEventToMemory(newEvent);
+                renderEventList();
                 eventForm.reset();
                 if (eventTypeSelect.options.length > 0) {
                     eventTypeSelect.selectedIndex = 0;
@@ -423,34 +429,39 @@
         }
 
         // --- Event Management Functions ---
-        function getEventsFromStorage() {
-            const eventsJson = localStorage.getItem(EVENTS_STORAGE_KEY);
+        async function loadEventsFromJson() {
             try {
-                return eventsJson ? JSON.parse(eventsJson) : [];
-            } catch (e) {
-                console.error("Error parsing events from localStorage:", e);
-                localStorage.removeItem(EVENTS_STORAGE_KEY);
-                showMessage('데이터 로딩 중 오류가 발생했습니다. 데이터를 초기화합니다.', 'error');
-                return [];
+                const response = await fetch(DATA_FILE_PATH + '?t=' + Date.now());
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        console.warn(`${DATA_FILE_PATH} not found. Starting with empty list.`);
+                        currentEvents = [];
+                    } else {
+                         throw new Error(`Failed to load events: ${response.status} ${response.statusText}`);
+                    }
+                } else {
+                    const data = await response.json();
+                    if (data && Array.isArray(data.events)) {
+                        currentEvents = data.events;
+                        console.log(`Loaded ${currentEvents.length} events from ${DATA_FILE_PATH}`);
+                    } else {
+                        console.warn(`Invalid format in ${DATA_FILE_PATH}. Starting with empty list.`);
+                        currentEvents = [];
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading events from JSON:", error);
+                showMessage('이벤트 데이터를 불러오는 중 오류가 발생했습니다.', 'error');
+                currentEvents = [];
             }
+            renderEventList();
         }
 
-        function saveEventsToStorage(events) {
-            localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
-        }
-
-        function saveSingleEvent(event) {
-            const events = getEventsFromStorage();
-            events.push(event);
-            saveEventsToStorage(events);
-        }
-
-        function loadEvents() {
-            const allEvents = getEventsFromStorage();
+        function renderEventList() {
             const searchTerm = searchInput.value.trim().toLowerCase();
             const selectedType = searchType.value;
             
-            const filteredEvents = allEvents.filter(event => {
+            const filteredEvents = currentEvents.filter(event => {
                 const personName = event.person || '';
                 const typeMatch = !selectedType || event.type === selectedType;
                 const nameMatch = !searchTerm || personName.toLowerCase().includes(searchTerm);
@@ -462,11 +473,19 @@
                 showEmptyRow();
             } else {
                 hideEmptyRow();
-                filteredEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+                filteredEvents.sort((a, b) => {
+                    const dateA = a.date ? new Date(a.date) : 0;
+                    const dateB = b.date ? new Date(b.date) : 0;
+                    return dateB - dateA;
+                 });
                 filteredEvents.forEach((event, index) => {
                     addEventToList(event, index + 1);
                 });
             }
+        }
+
+        function addEventToMemory(event) {
+            currentEvents.push(event);
         }
 
         function addEventToList(event, rowNumber) {
@@ -493,33 +512,31 @@
         }
 
         window.confirmDeleteAll = function() {
-            if (confirm('모든 내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-                deleteAllEvents();
+            if (confirm('현재 표시된 모든 내역을 삭제하시겠습니까? \n변경 사항을 영구 저장하려면 JSON 파일을 다시 다운로드하여 덮어써야 합니다.')) {
+                deleteAllEventsFromMemory();
             }
         }
 
-        function deleteAllEvents() {
-            localStorage.removeItem(EVENTS_STORAGE_KEY);
-            loadEvents();
-            showMessage('모든 내역이 삭제되었습니다.', 'success');
+        function deleteAllEventsFromMemory() {
+            currentEvents = [];
+            renderEventList();
+            showMessage('모든 내역이 메모리에서 삭제되었습니다. 저장하려면 JSON 파일을 Export/Download 하세요.', 'success');
         }
 
         window.confirmDelete = function(id) {
-            if (confirm('이 항목을 삭제하시겠습니까? 삭제하면 복구할 수 없습니다.')) {
-                deleteEvent(id);
+            if (confirm('이 항목을 메모리에서 삭제하시겠습니까? \n변경 사항을 영구 저장하려면 JSON 파일을 다시 다운로드하여 덮어써야 합니다.')) {
+                deleteEventFromMemory(id);
             }
         }
 
-        function deleteEvent(id) {
-            let events = getEventsFromStorage();
-            const initialLength = events.length;
-            events = events.filter(event => event.id !== id);
-            if (events.length < initialLength) {
-                saveEventsToStorage(events);
-                loadEvents();
-                showMessage('선택한 내역이 삭제되었습니다.', 'success');
+        function deleteEventFromMemory(id) {
+            const initialLength = currentEvents.length;
+            currentEvents = currentEvents.filter(event => event.id !== id);
+            if (currentEvents.length < initialLength) {
+                renderEventList();
+                showMessage('선택한 내역이 메모리에서 삭제되었습니다. 저장하려면 JSON 파일을 Export/Download 하세요.', 'success');
             } else {
-                 showMessage('삭제할 항목을 찾지 못했습니다.', 'error');
+                 showMessage('삭제할 항목을 메모리에서 찾지 못했습니다.', 'error');
             }
         }
 
@@ -528,7 +545,7 @@
             if (!file) { return; }
 
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array', cellDates: true });
@@ -584,14 +601,14 @@
                                 amount: String(row[headerMap['금액']] || '').trim(),
                                 notes: String(row[headerMap['메모']] || '').trim(),
                             };
-                            saveSingleEvent(newEvent);
+                            addEventToMemory(newEvent);
                             addedCount++;
                         } else {
                              console.warn(`Skipping row ${i + 1}: Missing required data (날짜, 구분, 대상자).`);
                         }
                     }
-                    loadEvents();
-                    showMessage(`${addedCount}개의 내역을 엑셀 파일에서 가져왔습니다.`, 'success');
+                    renderEventList();
+                    showMessage(`${addedCount}개의 내역을 엑셀 파일에서 가져와 메모리에 추가했습니다. 저장하려면 JSON 파일을 Export/Download 하세요.`, 'success');
                 } catch (error) {
                     console.error("Error processing Excel file:", error);
                     showMessage('엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이나 내용을 확인하세요.', 'error');
@@ -630,16 +647,15 @@
                  .replace(/'/g, "&#039;");
         }
 
-        // --- Export Functions ---
+        // --- Export/Import Functions ---
         function exportToJSON() {
-            const events = getEventsFromStorage();
-            if (events.length === 0) {
-                showMessage('저장할 내역이 없습니다.', 'error');
+            if (currentEvents.length === 0) {
+                showMessage('Export할 내역이 없습니다.', 'error');
                 return;
             }
 
             const jsonData = {
-                events: events,
+                events: currentEvents,
                 lastUpdated: new Date().toISOString()
             };
 
@@ -652,33 +668,33 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showMessage('JSON 파일이 저장되었습니다.', 'success');
+            URL.revokeObjectURL(url);
+            showMessage('현재 내역이 JSON 파일(백업용)으로 저장되었습니다.', 'success');
         }
 
-        function loadJSON() {
-            fetch('./data/list.json')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('파일을 불러오는데 실패했습니다.');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.events && Array.isArray(data.events)) {
-                        saveEventsToStorage(data.events);
-                        loadEvents();
-                        showMessage(`${data.events.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
-                    } else {
-                        throw new Error('잘못된 JSON 형식입니다.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading JSON:', error);
-                    showMessage(error.message, 'error');
-                });
+        function exportDataFile() {
+            if (currentEvents.length === 0) {
+                showMessage('Download할 내역이 없습니다.', 'error');
+                return;
+            }
+            const jsonData = {
+                events: currentEvents,
+                lastUpdated: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'events.json');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showMessage('events.json 파일이 다운로드되었습니다. data 폴더에 덮어쓰고 커밋하세요.', 'success');
         }
 
-        // JSON 파일 로드 이벤트 리스너 추가
+        // JSON 파일 Import 이벤트 리스너
         document.getElementById('json-file-input').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -688,11 +704,11 @@
                 try {
                     const data = JSON.parse(e.target.result);
                     if (data.events && Array.isArray(data.events)) {
-                        saveEventsToStorage(data.events);
-                        loadEvents();
-                        showMessage(`${data.events.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
+                        currentEvents = data.events;
+                        renderEventList();
+                        showMessage(`${currentEvents.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
                     } else {
-                        throw new Error('잘못된 JSON 형식입니다.');
+                        throw new Error('가져온 파일에 events 배열이 없거나 형식이 잘못되었습니다.');
                     }
                 } catch (error) {
                     console.error('Error parsing JSON:', error);
@@ -704,32 +720,8 @@
                 showMessage('파일을 읽는 중 오류가 발생했습니다.', 'error');
             };
             reader.readAsText(file);
+            event.target.value = '';
         });
-
-        function downloadJSON() {
-            fetch('./data/list.json')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('파일을 다운로드하는데 실패했습니다.');
-                    }
-                    return response.blob();
-                })
-                .then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'list.json';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showMessage('JSON 파일이 다운로드되었습니다.', 'success');
-                })
-                .catch(error => {
-                    console.error('Error downloading JSON:', error);
-                    showMessage(error.message, 'error');
-                });
-        }
     </script>
 </body>
 </html>
