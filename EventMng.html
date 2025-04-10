@@ -83,13 +83,38 @@
           color: #374151;
           border-bottom: 2px solid #4f46e5;
       }
+      /* Added for sticky header */
+      .table-responsive {
+          display: block;
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          overflow-y: auto; /* Add vertical scroll */
+          max-height: 60vh; /* Limit height and enable vertical scrolling */
+      }
+      .table-responsive thead th {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          background-color: #f9fafb; /* bg-gray-50 */
+      }
+      /* End Added for sticky header */
       @media (max-width: 640px) {
           .table-responsive {
               display: block;
               width: 100%;
               overflow-x: auto;
               -webkit-overflow-scrolling: touch;
+              /* Keep mobile styles, sticky header might override some */
+              max-height: none; /* Reset max-height for mobile if needed, or adjust */
+              overflow-y: visible; /* Reset overflow-y for mobile if needed */
           }
+          /* Optionally disable sticky header on mobile if it causes issues */
+          /*
+          .table-responsive thead th {
+              position: static;
+          }
+          */
           .table-responsive table {
               min-width: 600px;
           }
@@ -150,6 +175,7 @@
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">대상자</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">금액</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">구분</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관계</th>
                             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">메모</th>
                             <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 <button onclick="confirmDeleteAll()" class="text-red-600 hover:text-red-900 p-1" title="전체 삭제">
@@ -160,7 +186,7 @@
                     </thead>
                     <tbody id="event-list" class="bg-white divide-y divide-gray-200">
                         <tr id="empty-row" class="hidden">
-                            <td colspan="6" class="px-4 py-4 text-center text-sm text-gray-500">등록된 내역이 없거나 검색 결과가 없습니다.</td>
+                            <td colspan="7" class="px-4 py-4 text-center text-sm text-gray-500">등록된 내역이 없거나 검색 결과가 없습니다.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -182,6 +208,10 @@
                 <div class="mobile-full-width">
                     <label for="event-person" class="block text-sm font-medium text-gray-700 mb-1">대상자</label>
                     <input type="text" id="event-person" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                </div>
+                <div class="mobile-full-width">
+                    <label for="event-relation" class="block text-sm font-medium text-gray-700 mb-1">관계</label>
+                    <input type="text" id="event-relation" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
                 <div class="mobile-full-width">
                     <label for="event-amount" class="block text-sm font-medium text-gray-700 mb-1">금액</label>
@@ -222,7 +252,7 @@
                         <p class="text-sm text-gray-600 mb-2">
                             엑셀 파일(.xlsx, .xls)의 첫 번째 시트 데이터를 가져옵니다.<br>
                             필수 헤더: <code class="text-xs bg-gray-200 px-1 rounded">날짜</code>, <code class="text-xs bg-gray-200 px-1 rounded">구분</code>, <code class="text-xs bg-gray-200 px-1 rounded">대상자</code><br>
-                            선택 헤더: <code class="text-xs bg-gray-200 px-1 rounded">금액</code>, <code class="text-xs bg-gray-200 px-1 rounded">메모</code>
+                            선택 헤더: <code class="text-xs bg-gray-200 px-1 rounded">금액</code>, <code class="text-xs bg-gray-200 px-1 rounded">메모</code>, <code class="text-xs bg-gray-200 px-1 rounded">관계</code>
                         </p>
                         <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
                     </div>
@@ -270,6 +300,7 @@
         const TYPES_STORAGE_KEY = 'gyeongjosaTypes';
         const DEFAULT_TYPES = ['윤아 결혼', '할머니 장례'];
         const DATA_FILE_PATH = './data/events.json';
+        const ADMIN_PASSWORD = 'inzi1234'; // 관리자 비밀번호 (실제 환경에서는 더 안전한 방식 사용 권장)
 
         // --- Global State ---
         let currentEvents = [];
@@ -295,6 +326,7 @@
                     person: document.getElementById('event-person').value.trim(),
                     amount: document.getElementById('event-amount').value,
                     notes: document.getElementById('event-memo').value.trim(),
+                    relation: document.getElementById('event-relation').value.trim(),
                 };
 
                 if (!newEvent.date || !newEvent.type || !newEvent.person) {
@@ -312,17 +344,46 @@
             });
             excelFileInput.addEventListener('change', handleExcelFile);
 
-            // 탭 기능 초기화
+            // 탭 기능 초기화 (비밀번호 확인 로직 추가)
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const tab = button.getAttribute('data-tab');
-                    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-                    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-                    button.classList.add('active');
-                    document.getElementById(`${tab}-tab`).classList.add('active');
+
+                    if (tab === 'register' || tab === 'manage') {
+                        const password = prompt('관리자 비밀번호를 입력하세요:');
+                        if (password === ADMIN_PASSWORD) {
+                            activateTab(tab);
+                        } else if (password !== null) { // 사용자가 취소 누른게 아니라면
+                            showMessage('비밀번호가 올바르지 않습니다.', 'error');
+                             // 비밀번호 틀리면 기본 '조회' 탭으로 이동
+                            activateTab('list');
+                        } else {
+                            // 사용자가 프롬프트를 취소한 경우, 현재 활성 탭 유지 (또는 기본 탭으로 이동)
+                            // 현재는 아무것도 하지 않거나, 기본 탭으로 이동하도록 설정할 수 있습니다.
+                            // 여기서는 기본 '조회' 탭으로 이동시킵니다.
+                             activateTab('list');
+                        }
+                    } else {
+                        activateTab(tab); // '조회' 탭은 바로 활성화
+                    }
                 });
             });
+
+            // 초기 로딩 시 '조회' 탭 활성화
+            activateTab('list');
         });
+
+        // --- Activate Tab Function ---
+        function activateTab(tabId) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            const button = document.querySelector(`.tab-button[data-tab="${tabId}"]`);
+            if (button) button.classList.add('active');
+
+            const content = document.getElementById(`${tabId}-tab`);
+            if (content) content.classList.add('active');
+        }
 
         // --- Message Display Function ---
         function showMessage(text, type = 'success') {
@@ -442,7 +503,10 @@
                 } else {
                     const data = await response.json();
                     if (data && Array.isArray(data.events)) {
-                        currentEvents = data.events;
+                        currentEvents = data.events.map(event => ({
+                            ...event,
+                            relation: event.relation || ''
+                        }));
                         console.log(`Loaded ${currentEvents.length} events from ${DATA_FILE_PATH}`);
                     } else {
                         console.warn(`Invalid format in ${DATA_FILE_PATH}. Starting with empty list.`);
@@ -469,259 +533,214 @@
             });
             
             eventList.innerHTML = '';
+            let eventNumber = 1;
+
             if (filteredEvents.length === 0) {
-                showEmptyRow();
+                emptyRow.classList.remove('hidden');
+                emptyRow.querySelector('td').colSpan = 7;
             } else {
-                hideEmptyRow();
-                filteredEvents.sort((a, b) => {
-                    const dateA = a.date ? new Date(a.date) : 0;
-                    const dateB = b.date ? new Date(b.date) : 0;
-                    return dateB - dateA;
-                 });
-                filteredEvents.forEach((event, index) => {
-                    addEventToList(event, index + 1);
+                emptyRow.classList.add('hidden');
+                filteredEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                filteredEvents.forEach(event => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50 mobile-text-sm';
+                    row.innerHTML = `
+                        <td class="px-4 py-3 whitespace-nowrap">${eventNumber++}</td>
+                        <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-900">${escapeHtml(event.person)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-right text-gray-500">${formatAmount(event.amount)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-gray-500">${escapeHtml(event.type)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-gray-500">${escapeHtml(event.relation || '')}</td>
+                        <td class="px-4 py-3 text-gray-500 max-w-xs truncate" title="${escapeHtml(event.notes || '')}">${escapeHtml(event.notes || '')}</td>
+                        <td class="px-4 py-3 text-center whitespace-nowrap">
+                            <button onclick="editEvent(${event.id})" class="text-indigo-600 hover:text-indigo-900 p-1 mr-1" title="수정">
+                                <span class="lucide text-sm">&#xE4CA;</span> </button>
+                            <button onclick="confirmDelete(${event.id})" class="text-red-600 hover:text-red-900 p-1" title="삭제">
+                                <span class="lucide text-sm">&#xE4CF;</span> </button>
+                        </td>
+                    `;
+                    eventList.appendChild(row);
                 });
             }
         }
 
         function addEventToMemory(event) {
             currentEvents.push(event);
+            renderEventList();
         }
 
-        function addEventToList(event, rowNumber) {
-             const row = document.createElement('tr');
-             row.setAttribute('data-id', event.id);
-             row.classList.add('hover:bg-gray-50');
-
-             const formattedAmount = event.amount && !isNaN(parseInt(event.amount, 10))
-                                    ? parseInt(event.amount, 10).toLocaleString('ko-KR') + '만원'
-                                    : '-';
-
-             row.innerHTML = `
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${rowNumber}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(event.person || '-')}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${formattedAmount}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${escapeHtml(event.type || '-')}</td>
-                <td class="px-4 py-3 text-sm text-gray-700 break-words max-w-xs">${escapeHtml(event.notes || '-')}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-center text-sm font-medium">
-                    <button onclick="confirmDelete(${event.id})" class="text-red-600 hover:text-red-900 p-1" title="삭제">
-                        <span class="lucide">&#xE4CF;</span> </button>
-                </td>
-            `;
-            eventList.appendChild(row);
+        function formatAmount(amount) {
+            if (amount === null || amount === undefined || amount === '') return '';
+            const num = Number(amount);
+            return isNaN(num) ? '' : num.toLocaleString();
         }
 
         window.confirmDeleteAll = function() {
-            if (confirm('현재 표시된 모든 내역을 삭제하시겠습니까? \n변경 사항을 영구 저장하려면 JSON 파일을 다시 다운로드하여 덮어써야 합니다.')) {
-                deleteAllEventsFromMemory();
+            if (confirm('정말로 모든 경조사 내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                currentEvents = [];
+                renderEventList();
+                showMessage('모든 내역이 삭제되었습니다.', 'success');
             }
-        }
-
-        function deleteAllEventsFromMemory() {
-            currentEvents = [];
-            renderEventList();
-            showMessage('모든 내역이 메모리에서 삭제되었습니다. 저장하려면 JSON 파일을 Export/Download 하세요.', 'success');
         }
 
         window.confirmDelete = function(id) {
-            if (confirm('이 항목을 메모리에서 삭제하시겠습니까? \n변경 사항을 영구 저장하려면 JSON 파일을 다시 다운로드하여 덮어써야 합니다.')) {
-                deleteEventFromMemory(id);
+            const eventToDelete = currentEvents.find(event => event.id === id);
+            if (eventToDelete && confirm(`'${eventToDelete.person}'님의 내역을 삭제하시겠습니까?`)) {
+                currentEvents = currentEvents.filter(event => event.id !== id);
+                renderEventList();
+                showMessage('내역이 삭제되었습니다.', 'success');
             }
         }
 
-        function deleteEventFromMemory(id) {
-            const initialLength = currentEvents.length;
+        window.editEvent = function(id) {
+            const eventToEdit = currentEvents.find(event => event.id === id);
+            if (!eventToEdit) return;
+
+            // 폼 필드 채우기
+            document.getElementById('event-date').value = eventToEdit.date;
+            document.getElementById('event-type').value = eventToEdit.type;
+            document.getElementById('event-person').value = eventToEdit.person;
+            document.getElementById('event-amount').value = eventToEdit.amount || '';
+            document.getElementById('event-memo').value = eventToEdit.notes || '';
+            document.getElementById('event-relation').value = eventToEdit.relation || '';
+
+            // 기존 이벤트 임시 제거 (수정 후 새로 추가할 것임)
             currentEvents = currentEvents.filter(event => event.id !== id);
-            if (currentEvents.length < initialLength) {
-                renderEventList();
-                showMessage('선택한 내역이 메모리에서 삭제되었습니다. 저장하려면 JSON 파일을 Export/Download 하세요.', 'success');
-            } else {
-                 showMessage('삭제할 항목을 메모리에서 찾지 못했습니다.', 'error');
-            }
+
+             // 등록 탭으로 이동 및 폼에 포커스 (탭 활성화 로직 필요 시 추가)
+             activateTab('register'); // 등록 탭으로 이동
+             document.getElementById('event-person').focus(); // 대상자 필드에 포커스
+
+            showMessage('수정할 내용을 입력 후 다시 등록해주세요.', 'info');
         }
 
         function handleExcelFile(event) {
             const file = event.target.files[0];
-            if (!file) { return; }
+            if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = async (e) => {
+            reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    const workbook = XLSX.read(data, { type: 'array', cellDates:true, dateNF:'yyyy-mm-dd' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
                     if (jsonData.length < 2) {
-                         showMessage('엑셀 파일에 헤더 또는 데이터가 없습니다.', 'error');
-                        return;
+                        throw new Error("엑셀 파일에 헤더 또는 데이터가 없습니다.");
                     }
 
-                    const headers = jsonData[0].map(h => String(h).trim());
+                    const headers = jsonData[0].map(h => h.toString().trim());
                     const requiredHeaders = ['날짜', '구분', '대상자'];
-                    const missingHeaders = requiredHeaders.filter(rh => !headers.includes(rh));
+                    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
 
                     if (missingHeaders.length > 0) {
-                        showMessage(`엑셀 파일에 필수 헤더가 누락되었습니다: ${missingHeaders.join(', ')}`, 'error');
-                        return;
+                        throw new Error(`필수 헤더 누락: ${missingHeaders.join(', ')}`);
                     }
 
-                    const headerMap = {};
-                    headers.forEach((h, index) => { headerMap[h] = index; });
+                    const dateIndex = headers.indexOf('날짜');
+                    const typeIndex = headers.indexOf('구분');
+                    const personIndex = headers.indexOf('대상자');
+                    const amountIndex = headers.indexOf('금액');
+                    const notesIndex = headers.indexOf('메모');
+                    const relationIndex = headers.indexOf('관계');
 
-                    let addedCount = 0;
+                    const importedEvents = [];
+                    let skippedCount = 0;
                     for (let i = 1; i < jsonData.length; i++) {
                         const row = jsonData[i];
-                        if (row[headerMap['날짜']] && row[headerMap['구분']] && row[headerMap['대상자']]) {
-                            let excelDate = row[headerMap['날짜']];
-                            let formattedDate = '';
-                            if (excelDate instanceof Date) {
-                                const year = excelDate.getFullYear();
-                                const month = String(excelDate.getMonth() + 1 ).padStart(2, '0');
-                                const day = String(excelDate.getDate()).padStart(2, '0');
-                                formattedDate = `${year}-${month}-${day}`;
-                            } else if (typeof excelDate === 'number') {
-                                const dateObj = XLSX.SSF.parse_date_code(excelDate);
-                                if (dateObj) {
-                                     const year = dateObj.y;
-                                     const month = String(dateObj.m).padStart(2, '0');
-                                     const day = String(dateObj.d).padStart(2, '0');
-                                     formattedDate = `${year}-${month}-${day}`;
-                                }
-                            } else if (typeof excelDate === 'string') {
-                                formattedDate = excelDate;
-                            }
+                        if (!row[dateIndex] && !row[typeIndex] && !row[personIndex]) continue;
 
-                            const newEvent = {
-                                id: Date.now() + i,
-                                date: formattedDate,
-                                type: String(row[headerMap['구분']] || '').trim(),
-                                person: String(row[headerMap['대상자']] || '').trim(),
-                                amount: String(row[headerMap['금액']] || '').trim(),
-                                notes: String(row[headerMap['메모']] || '').trim(),
-                            };
-                            addEventToMemory(newEvent);
-                            addedCount++;
+                        let eventDate;
+                        if (row[dateIndex] instanceof Date) {
+                           const d = row[dateIndex];
+                           eventDate = d.getFullYear() + '-' +
+                                       ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+                                       ('0' + d.getDate()).slice(-2);
+                        } else if (typeof row[dateIndex] === 'string') {
+                           if (/^\d{4}-\d{2}-\d{2}$/.test(row[dateIndex])) {
+                               eventDate = row[dateIndex];
+                           } else {
+                               console.warn(`Row ${i+1}: Invalid date format - ${row[dateIndex]}. Skipping.`);
+                               skippedCount++;
+                               continue;
+                           }
                         } else {
-                             console.warn(`Skipping row ${i + 1}: Missing required data (날짜, 구분, 대상자).`);
+                           console.warn(`Row ${i+1}: Invalid or missing date - ${row[dateIndex]}. Skipping.`);
+                           skippedCount++;
+                           continue;
+                        }
+
+                        const eventType = row[typeIndex] ? row[typeIndex].toString().trim() : '';
+                        const eventPerson = row[personIndex] ? row[personIndex].toString().trim() : '';
+
+                        if (!eventDate || !eventType || !eventPerson) {
+                           console.warn(`Row ${i+1}: Missing required field (Date, Type, or Person). Skipping.`);
+                           skippedCount++;
+                           continue;
+                        }
+
+                        const eventAmount = (amountIndex > -1 && row[amountIndex] !== null && row[amountIndex] !== undefined) ? row[amountIndex] : '';
+                        const eventNotes = (notesIndex > -1 && row[notesIndex] !== null && row[notesIndex] !== undefined) ? row[notesIndex].toString().trim() : '';
+                        const eventRelation = (relationIndex > -1 && row[relationIndex] !== null && row[relationIndex] !== undefined) ? row[relationIndex].toString().trim() : '';
+
+                        importedEvents.push({
+                            id: Date.now() + i,
+                            date: eventDate,
+                            type: eventType,
+                            person: eventPerson,
+                            amount: eventAmount,
+                            notes: eventNotes,
+                            relation: eventRelation
+                        });
+
+                        let types = getTypesFromStorage();
+                        if (eventType && !types.includes(eventType)) {
+                            types.push(eventType);
+                            saveTypesToStorage(types);
+                            loadTypes();
                         }
                     }
-                    renderEventList();
-                    showMessage(`${addedCount}개의 내역을 엑셀 파일에서 가져와 메모리에 추가했습니다. 저장하려면 JSON 파일을 Export/Download 하세요.`, 'success');
+
+                    if (importedEvents.length > 0) {
+                        currentEvents.push(...importedEvents);
+                        renderEventList();
+                        let message = `${importedEvents.length}개의 내역을 성공적으로 가져왔습니다.`;
+                        if(skippedCount > 0) {
+                            message += ` (필수 정보 누락 등으로 ${skippedCount}개 행 건너뜀)`;
+                        }
+                         showMessage(message, 'success');
+                    } else {
+                        throw new Error("파일에서 유효한 데이터를 가져오지 못했습니다.");
+                    }
+
                 } catch (error) {
                     console.error("Error processing Excel file:", error);
-                    showMessage('엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이나 내용을 확인하세요.', 'error');
+                    showMessage(`엑셀 파일 처리 중 오류 발생: ${error.message}`, 'error');
                 } finally {
-                     excelFileInput.value = '';
+                     event.target.value = null;
                 }
             };
-            reader.onerror = (error) => {
-                 console.error("File reading error:", error);
-                 showMessage('파일을 읽는 중 오류가 발생했습니다.', 'error');
-                 excelFileInput.value = '';
+            reader.onerror = () => {
+                showMessage('파일을 읽는 중 오류가 발생했습니다.', 'error');
+                event.target.value = null;
             };
             reader.readAsArrayBuffer(file);
         }
 
-        function showEmptyRow() {
-            const searchTerm = searchInput.value.trim();
-            emptyRow.querySelector('td').setAttribute('colspan', '6');
-            emptyRow.querySelector('td').textContent = searchTerm
-                ? `"${escapeHtml(searchTerm)}"에 대한 검색 결과가 없습니다.`
-                : '등록된 내역이 없습니다.';
-            emptyRow.classList.remove('hidden');
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return '';
+            return str.replace(/[&<>"']/g, function (match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
         }
-
-        function hideEmptyRow() {
-             emptyRow.classList.add('hidden');
-        }
-
-        function escapeHtml(unsafe) {
-            if (typeof unsafe !== 'string') return unsafe;
-            return unsafe
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-        }
-
-        // --- Export/Import Functions ---
-        function exportToJSON() {
-            if (currentEvents.length === 0) {
-                showMessage('Export할 내역이 없습니다.', 'error');
-                return;
-            }
-
-            const jsonData = {
-                events: currentEvents,
-                lastUpdated: new Date().toISOString()
-            };
-
-            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `경조사_내역_${new Date().toISOString().split('T')[0]}.json`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            showMessage('현재 내역이 JSON 파일(백업용)으로 저장되었습니다.', 'success');
-        }
-
-        function exportDataFile() {
-            if (currentEvents.length === 0) {
-                showMessage('Download할 내역이 없습니다.', 'error');
-                return;
-            }
-            const jsonData = {
-                events: currentEvents,
-                lastUpdated: new Date().toISOString()
-            };
-            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'events.json');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            showMessage('events.json 파일이 다운로드되었습니다. data 폴더에 덮어쓰고 커밋하세요.', 'success');
-        }
-
-        // JSON 파일 Import 이벤트 리스너
-        document.getElementById('json-file-input').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.events && Array.isArray(data.events)) {
-                        currentEvents = data.events;
-                        renderEventList();
-                        showMessage(`${currentEvents.length}개의 내역을 JSON 파일에서 가져왔습니다.`, 'success');
-                    } else {
-                        throw new Error('가져온 파일에 events 배열이 없거나 형식이 잘못되었습니다.');
-                    }
-                } catch (error) {
-                    console.error('Error parsing JSON:', error);
-                    showMessage('JSON 파일 형식이 올바르지 않습니다.', 'error');
-                }
-            };
-            reader.onerror = function(error) {
-                console.error('File reading error:', error);
-                showMessage('파일을 읽는 중 오류가 발생했습니다.', 'error');
-            };
-            reader.readAsText(file);
-            event.target.value = '';
-        });
     </script>
 </body>
 </html>
